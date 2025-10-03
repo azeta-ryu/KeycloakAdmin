@@ -7,7 +7,7 @@
     "openApiToCSharpClient": {
       "className": "KeycloakOpenApiClient",
       "namespace": "KeycloakAdmin.OpenApi",
-      "output": "KeycloakOpenApiClient.cs",
+      "output": "GeneratedCode/KeycloakOpenApiClient.cs",
       "generateClientInterfaces": true, 
       "jsonLibrary": "SystemTextJson",
       "injectHttpClient": true,
