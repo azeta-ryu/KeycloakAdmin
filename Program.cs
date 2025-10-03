@@ -7,12 +7,19 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.TypeInfoResolverChain.Insert(0, AppJsonSerializerContext.Default);
 });
+
 builder.Services.AddKeycloakHttpClient(o =>
 {
-    o.Host = "https://keycloak.example.com";
+    o.Host = "https://auth.dev.biggie.com.py";
     o.Realm = "master";
     o.ClientId = "admin-cli";
-    o.ClientSecret = "<secret>";
+    o.Flow = KeycloakAuthFlow.Password;
+    o.Username = "admin";
+    o.Password = "admin";
+    o.FailFastOnStartup = true;
+    o.LogRequestBody = true;
+    o.LogResponseBody = true;
+    o.MaxBodyLogBytes = 8192;
 });
 
 var app = builder.Build();
