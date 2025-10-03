@@ -26,6 +26,7 @@ builder.Services.AddKeycloakHttpClient(o =>
 var app = builder.Build();
 app.MapOpenApi();
 app.MapScalarApiReference();
+app.MapGet("/", () => Results.Redirect("/scalar"));
 app.MapKeycloakUserBulkEndpoints();
 
 app.Run();
