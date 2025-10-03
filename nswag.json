@@ -1,0 +1,20 @@
+﻿{
+  "runtime": "Net90",
+  "documentGenerator": {
+    "fromDocument": { "url": "./keycloakOpenApi.json" }
+  },
+  "codeGenerators": {
+    "openApiToCSharpClient": {
+      "className": "KeycloakOpenApiClient",
+      "namespace": "KeycloakAdmin.OpenApi",
+      "output": "KeycloakOpenApiClient.cs",
+      "generateClientInterfaces": true, 
+      "jsonLibrary": "SystemTextJson",
+      "injectHttpClient": true,
+      "useBaseUrl": false,
+      "disposeHttpClient": false,
+      "generateNullableReferenceTypes": true,
+      "dateTimeType": "System.DateTimeOffset"
+    }
+  }
+}

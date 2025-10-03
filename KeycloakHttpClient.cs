@@ -9,6 +9,8 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using KeycloakAdmin.OpenApi;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace KeycloakAdmin
@@ -66,8 +68,9 @@ namespace KeycloakAdmin
     public static class ServiceCollectionExtensions
     {
         /// <summary>
-        /// Registers KeycloakOpenApiClient as a typed HttpClient, attaches bearer tokens,
-        /// logs requests/responses, and runs a startup connectivity probe.
+        /// Registers KeycloakOpenApiClient as an <see cref="IKeycloakOpenApiClient"/> using a named HttpClient,
+        /// attaches bearer tokens, logs requests/responses, and runs a startup connectivity probe.
+        /// Expects NSwag to generate with: InjectHttpClient=true, UseBaseUrl=false, JsonLibrary=SystemTextJson.
         /// </summary>
         public static IServiceCollection AddKeycloakHttpClient(
             this IServiceCollection services,
@@ -83,21 +86,23 @@ namespace KeycloakAdmin
 
             // Named client so the startup probe can use the same pipeline (and thus be logged)
             services.AddHttpClient("keycloak-admin")
+                .ConfigureHttpClient((sp, http) =>
+                {
+                    var opts = sp.GetRequiredService<IOptions<KeycloakClientOptions>>().Value;
+                    http.BaseAddress = new Uri(opts.Host); // UseBaseUrl=false → rely on BaseAddress
+                    http.DefaultRequestHeaders.Accept.Add(
+                        new MediaTypeWithQualityHeaderValue("application/json"));
+                })
                 .AddHttpMessageHandler<LoggingHandler>()      // outermost: log everything
                 .AddHttpMessageHandler<BearerTokenHandler>(); // then authorization
 
-            // Typed client factory
-            services.AddTransient(provider =>
+            // Bind the generated interface to the implementation using the named pipeline
+            services.AddTransient<IKeycloakOpenApiClient>(provider =>
             {
                 var httpFactory = provider.GetRequiredService<IHttpClientFactory>();
                 var http = httpFactory.CreateClient("keycloak-admin");
-
-                var opts = provider.GetRequiredService<IOptions<KeycloakClientOptions>>().Value;
-                http.DefaultRequestHeaders.Accept.Add(
-                    new MediaTypeWithQualityHeaderValue("application/json"));
-
-                // NSwag-generated client expects a BaseUrl string and an HttpClient
-                return new KeycloakOpenApiClient(opts.Host, http);
+                // NSwag with InjectHttpClient=true → ctor(HttpClient)
+                return new KeycloakOpenApiClient(http);
             });
 
             return services;
@@ -336,7 +341,7 @@ namespace KeycloakAdmin
     }
 
     // ============================================================
-    // Startup connectivity probe (now uses named client + explanations)
+    // Startup connectivity probe (uses named client + relative URL)
     // ============================================================
     internal sealed class KeycloakStartupProbe : IHostedService
     {
@@ -371,10 +376,9 @@ namespace KeycloakAdmin
 
                 _log.LogInformation("Keycloak startup probe: calling /admin/serverinfo…");
                 var factory = _sp.GetRequiredService<IHttpClientFactory>();
-                using var http = factory.CreateClient("keycloak-admin"); // uses LoggingHandler
+                using var http = factory.CreateClient("keycloak-admin"); // uses LoggingHandler + BaseAddress
 
-                var url = $"{o.Host.TrimEnd('/')}/admin/serverinfo";
-                using var res = await http.GetAsync(url, cts.Token).ConfigureAwait(false);
+                using var res = await http.GetAsync("admin/serverinfo", cts.Token).ConfigureAwait(false);
                 var body = await res.Content.ReadAsStringAsync().ConfigureAwait(false);
 
                 if (res.IsSuccessStatusCode)

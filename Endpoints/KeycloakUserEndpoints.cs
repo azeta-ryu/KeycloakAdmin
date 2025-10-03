@@ -62,11 +62,11 @@ internal static class KeycloakUserBulkEndpoints
                     Enabled = true
                 };
 
-                await kc.Users6Async(user, realm, ct); // POST /admin/realms/{realm}/users
+                await kc.UsersPOSTAsync(user, realm, ct); // POST /admin/realms/{realm}/users
                 created = true;
 
                 // 2) Re-fetch user id
-                var matches = await kc.Users5Async(
+                var matches = await kc.UsersAll3Async(
                     briefRepresentation: true,
                     email: null,
                     emailVerified: null,
@@ -91,7 +91,7 @@ internal static class KeycloakUserBulkEndpoints
             catch (ApiException ex) when (ex.StatusCode == (int)HttpStatusCode.Conflict)
             {
                 // User exists → fetch ID
-                var matches = await kc.Users5Async(
+                var matches = await kc.UsersAll3Async(
                     briefRepresentation: true,
                     email: null,
                     emailVerified: null,
