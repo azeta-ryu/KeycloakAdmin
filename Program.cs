@@ -1,10 +1,18 @@
 using System.Text.Json.Serialization;
+using KeycloakAdmin;
 
 var builder = WebApplication.CreateSlimBuilder(args);
 
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
     options.SerializerOptions.TypeInfoResolverChain.Insert(0, AppJsonSerializerContext.Default);
+});
+builder.Services.AddKeycloakHttpClient(o =>
+{
+    o.Host = "https://keycloak.example.com";
+    o.Realm = "master";
+    o.ClientId = "admin-cli";
+    o.ClientSecret = "<secret>";
 });
 
 var app = builder.Build();
