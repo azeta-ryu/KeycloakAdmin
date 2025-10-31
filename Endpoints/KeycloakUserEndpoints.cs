@@ -13,13 +13,21 @@ internal static class KeycloakUserBulkEndpoints
         var group = app.MapGroup("/keycloak/users");
         group.MapPost("/bulk", BulkCreate);
     }
+    
+    public sealed record Person(
+        string NationalId, 
+        string Email, 
+        string Name, 
+        string LastName, 
+        string? GroupId
+    );
 
-    public sealed record Person(string NationalId, string Email, string Name, string LastName);
     public sealed record BulkCreateUserResult(
         string Username,
         string? UserId,
         bool Created,
         bool PasswordSet,
+        bool GroupAssigned,
         string? Error);
     
     private static async Task<IResult> BulkCreate(
@@ -42,10 +50,7 @@ internal static class KeycloakUserBulkEndpoints
 
         return Results.Ok(results);
     }
-
-    /// <summary>
-    /// Creates or updates a single user and sets their password.
-    /// </summary>
+    
     private static async Task<BulkCreateUserResult> CreateUserAsync(
         Person p,
         KeycloakOpenApiClient kc,
@@ -55,12 +60,14 @@ internal static class KeycloakUserBulkEndpoints
         var username = p.NationalId?.Trim();
         if (string.IsNullOrWhiteSpace(username))
         {
-            return new(username ?? "", null, false, false, "NationalId is required");
+            return new(username ?? "", null, false, false, false, "NationalId is required");
         }
 
         string? userId = null;
         var created = false;
         var passwordSet = false;
+        var groupAssigned = false;
+        string? mainError = null;
 
         try
         {
@@ -75,23 +82,12 @@ internal static class KeycloakUserBulkEndpoints
 
             await kc.UsersPOSTAsync(user, realm, ct);
             created = true;
+            
             var matches = await kc.UsersAll3Async(
-                briefRepresentation: true,
-                email: null,
-                emailVerified: null,
-                enabled: null,
-                exact: true,
-                first: null,
-                firstName: null,
-                idpAlias: null,
-                idpUserId: null,
-                lastName: null,
-                max: 2,
-                q: null,
-                search: null,
-                username: username,
-                realm: realm,
-                cancellationToken: ct);
+                briefRepresentation: true, email: null, emailVerified: null, enabled: null,
+                exact: true, first: null, firstName: null, idpAlias: null, idpUserId: null,
+                lastName: null, max: 2, q: null, search: null, username: username,
+                realm: realm, cancellationToken: ct);
 
             userId = matches?.FirstOrDefault()?.Id;
             if (string.IsNullOrWhiteSpace(userId))
@@ -102,39 +98,28 @@ internal static class KeycloakUserBulkEndpoints
             try
             {
                 var matches = await kc.UsersAll3Async(
-                    briefRepresentation: true,
-                    email: null,
-                    emailVerified: null,
-                    enabled: null,
-                    exact: true,
-                    first: null,
-                    firstName: null,
-                    idpAlias: null,
-                    idpUserId: null,
-                    lastName: null,
-                    max: 2,
-                    q: null,
-                    search: null,
-                    username: username,
-                    realm: realm,
-                    cancellationToken: ct);
+                    briefRepresentation: true, email: null, emailVerified: null, enabled: null,
+                    exact: true, first: null, firstName: null, idpAlias: null, idpUserId: null,
+                    lastName: null, max: 2, q: null, search: null, username: username,
+                    realm: realm, cancellationToken: ct);
 
                 userId = matches?.FirstOrDefault()?.Id;
             }
             catch (Exception fetchEx)
             {
-                return new(username, null, false, false, $"User exists, but fetch failed: {fetchEx.Message}");
+                return new(username, null, false, false, false, $"User exists, but fetch failed: {fetchEx.Message}");
             }
         }
         catch (Exception ex)
         {
-            return new(username, null, created, passwordSet, $"Create lookup error: {ex.Message}");
+            return new(username, null, created, passwordSet, false, $"Create lookup error: {ex.Message}");
         }
+
         try
         {
             if (string.IsNullOrWhiteSpace(userId))
             {
-                return new(username, null, created, false, "User ID could not be determined for password set.");
+                return new(username, null, created, false, false, "User ID could not be determined for password set.");
             }
             
             var cred = new CredentialRepresentation
@@ -147,12 +132,24 @@ internal static class KeycloakUserBulkEndpoints
             await kc.ResetPasswordAsync(cred, realm, userId, ct);
             passwordSet = true;
             
+            if (!string.IsNullOrWhiteSpace(p.GroupId))
+            {
+                try
+                {
+                    await kc.GroupsPUT2Async(p.GroupId, realm, userId, ct);
+                    groupAssigned = true;
+                }
+                catch (Exception groupEx)
+                {
+                    mainError = $"Group assign error: {groupEx.Message}";
+                }
+            }
 
-            return new(username, userId, created, passwordSet, null);
+            return new(username, userId, created, passwordSet, groupAssigned, mainError);
         }
         catch (Exception ex)
         {
-            return new(username, userId, created, passwordSet, $"Password set error: {ex.Message}");
+            return new(username, userId, created, passwordSet, false, $"Password set error: {ex.Message}");
         }
     }
 }
