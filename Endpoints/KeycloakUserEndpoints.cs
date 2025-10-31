@@ -8,32 +8,12 @@ namespace KeycloakAdmin.Endpoints;
 
 internal static class KeycloakUserBulkEndpoints
 {
-    public static void MapKeycloakAdminEndpoints(this IEndpointRouteBuilder app)
+    public static void MapKeycloakUserBulkEndpoints(this IEndpointRouteBuilder app)
     {
-        // === User Endpoints ===
-        var usersGroup = app.MapGroup("/keycloak/users")
-            .WithTags("Keycloak Admin - Users");
-
-        usersGroup.MapPost("/bulk", BulkCreate)
-            .WithSummary("Bulk create or update users and set their password.")
-            .Produces<List<BulkCreateUserResult>>()
-            .Produces(StatusCodes.Status400BadRequest);
-
-        usersGroup.MapGet("/", GetAllUsers)
-            .WithSummary("Get users in the realm with optional filters.")
-            .Produces<ICollection<UserRepresentation>>()
-            .Produces(StatusCodes.Status500InternalServerError);
-
-        // === Group Endpoints ===
-        var groupsGroup = app.MapGroup("/keycloak/groups")
-            .WithTags("Keycloak Admin - Groups");
-
-        groupsGroup.MapGet("/", GetAllGroups)
-            .WithSummary("Get groups in the realm with optional filters.")
-            .Produces<ICollection<GroupRepresentation>>()
-            .Produces(StatusCodes.Status500InternalServerError);
+        var group = app.MapGroup("/keycloak/users");
+        group.MapPost("/bulk", BulkCreate);
     }
-
+    
     public sealed record Person(
         string NationalId, 
         string Email, 
@@ -172,106 +152,8 @@ internal static class KeycloakUserBulkEndpoints
             return new(username, userId, created, passwordSet, false, $"Password set error: {ex.Message}");
         }
     }
-
-    private static async Task<IResult> GetAllUsers(
-        [FromServices] KeycloakOpenApiClient kc,
-        [FromServices] IOptions<KeycloakClientOptions> opts,
-        [FromQuery] bool? briefRepresentation,
-        [FromQuery] string? email,
-        [FromQuery] bool? emailVerified,
-        [FromQuery] bool? enabled,
-        [FromQuery] bool? exact,
-        [FromQuery] int? first,
-        [FromQuery] string? firstName,
-        [FromQuery] string? idpAlias,
-        [FromQuery] string? idpUserId,
-        [FromQuery] string? lastName,
-        [FromQuery] int? max,
-        [FromQuery] string? q,
-        [FromQuery] string? search,
-        [FromQuery] string? username,
-        CancellationToken ct)
-    {
-        var realm = opts.Value.Realm;
-        try
-        {
-            var users = await kc.UsersAll3Async(
-                briefRepresentation: briefRepresentation,
-                email: email,
-                emailVerified: emailVerified,
-                enabled: enabled,
-                exact: exact,
-                first: first,
-                firstName: firstName,
-                idpAlias: idpAlias,
-                idpUserId: idpUserId,
-                lastName: lastName,
-                max: max,
-                q: q,
-                search: search,
-                username: username,
-                realm: realm,
-                cancellationToken: ct);
-
-            return Results.Ok(users);
-        }
-        catch (ApiException ex)
-        {
-            return Results.Problem(ex.Response, statusCode: ex.StatusCode, title: "Error fetching users");
-        }
-        catch (Exception ex)
-        {
-            return Results.Problem(ex.Message, statusCode: 500, title: "Internal server error");
-        }
-    }
-
-    /// <summary>
-    /// Gets all groups in the realm, supporting pagination and searching.
-    /// </summary>
-    private static async Task<IResult> GetAllGroups(
-        [FromServices] KeycloakOpenApiClient kc,
-        [FromServices] IOptions<KeycloakClientOptions> opts,
-        [FromQuery] bool? briefRepresentation,
-        [FromQuery] bool? exact,
-        [FromQuery] int? first,
-        [FromQuery] int? max,
-        [FromQuery] bool? populateHierarchy,
-        [FromQuery] string? q,
-        [FromQuery] string? search,
-        [FromQuery] bool? subGroupsCount,
-        CancellationToken ct)
-    {
-        var realm = opts.Value.Realm;
-        try
-        {
-            var groups = await kc.GroupsAll2Async(
-                briefRepresentation: briefRepresentation,
-                exact: exact,
-                first: first,
-                max: max,
-                populateHierarchy: populateHierarchy,
-                q: q,
-                search: search,
-                subGroupsCount: subGroupsCount,
-                realm: realm,
-                cancellationToken: ct);
-
-            return Results.Ok(groups);
-        }
-        catch (ApiException ex)
-        {
-            return Results.Problem(ex.Response, statusCode: ex.StatusCode, title: "Error fetching groups");
-        }
-        catch (Exception ex)
-        {
-            return Results.Problem(ex.Message, statusCode: 500, title: "Internal server error");
-        }
-    }
 }
-[JsonSerializable(typeof(ICollection<UserRepresentation>))]
-[JsonSerializable(typeof(List<UserRepresentation>))]
-[JsonSerializable(typeof(ICollection<GroupRepresentation>))]
-[JsonSerializable(typeof(List<GroupRepresentation>))]
+
 [JsonSerializable(typeof(KeycloakUserBulkEndpoints.Person[]))]
 [JsonSerializable(typeof(List<KeycloakUserBulkEndpoints.Person>))]
 [JsonSerializable(typeof(KeycloakUserBulkEndpoints.BulkCreateUserResult[]))]
