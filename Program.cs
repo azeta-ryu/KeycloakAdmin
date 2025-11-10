@@ -12,7 +12,7 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 builder.Services.AddOpenApi();
 builder.Services.AddKeycloakHttpClient(o =>
 {
-    o.Host = "https://auth.dev.biggie.com.py";
+    o.Host = "https://auth.azeta.com.py/";
     o.Realm = "master";
     o.ClientId = "admin-cli";
     o.Flow = KeycloakAuthFlow.Password;
@@ -28,6 +28,6 @@ var app = builder.Build();
 app.MapOpenApi();
 app.MapScalarApiReference();
 app.MapGet("/", () => Results.Redirect("/scalar"));
-app.MapKeycloakUserBulkEndpoints();
+app.MapKeycloakEndpoints();
 
 app.Run();
