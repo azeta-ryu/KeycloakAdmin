@@ -24,9 +24,4 @@
     <_NSwagExe Condition="'$(NSwagExe_Net90)' != ''">$(NSwagExe_Net90)</_NSwagExe>
     <_NSwagExe Condition="'$(_NSwagExe)' == '' and '$(NSwagExe_Net80)' != ''">$(NSwagExe_Net80)</_NSwagExe>
   </PropertyGroup>
-
-  <!-- regenerate client before each build (skip design-time/IntelliSense builds) -->
-  <Target Name="NSwag_Generate" BeforeTargets="BeforeBuild" Condition="'$(DesignTimeBuild)' != 'true'">
-    <Exec Command="$(_NSwagExe) run &quot;$(ProjectDir)nswag.json&quot;" />
-  </Target>
 </Project>

@@ -102,8 +102,13 @@ namespace KeycloakAdmin
             {
                 var httpFactory = provider.GetRequiredService<IHttpClientFactory>();
                 var http = httpFactory.CreateClient("keycloak-admin");
-                // NSwag with InjectHttpClient=true → ctor(HttpClient)
-                return new KeycloakOpenApiClient(http);
+                // Get the app's configured JsonSerializerOptions
+                // We resolve IOptions<JsonOptions> from the ASP.NET Core Http services
+                var jsonOptions = provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<Microsoft.AspNetCore.Http.Json.JsonOptions>>().Value;
+                var serializerOptions = jsonOptions.SerializerOptions;
+
+                // Pass the app's options into the new constructor
+                return new KeycloakOpenApiClient(http, serializerOptions);
             });
 
             return services;

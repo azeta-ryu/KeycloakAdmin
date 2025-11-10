@@ -6644,6 +6644,16 @@ namespace KeycloakAdmin.OpenApi
             Initialize();
         }
 
+#pragma warning disable CS8618
+        public KeycloakOpenApiClient(System.Net.Http.HttpClient httpClient, System.Text.Json.JsonSerializerOptions settings)
+            : this(httpClient) // Calls the base constructor
+#pragma warning restore CS8618
+        {
+            // By setting _instanceSettings, the 'JsonSerializerSettings' property
+            // will now use these settings instead of the static lazy default.
+            _instanceSettings = settings;
+        }
+
         private static System.Text.Json.JsonSerializerOptions CreateSerializerSettings()
         {
             var settings = new System.Text.Json.JsonSerializerOptions();

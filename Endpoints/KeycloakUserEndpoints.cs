@@ -38,7 +38,7 @@ internal static class KeycloakUserBulkEndpoints
         string? Error);
 
     private static async Task<IResult> BulkCreate(
-        [FromServices] KeycloakOpenApiClient kc,
+        [FromServices] IKeycloakOpenApiClient kc,
         [FromServices] IOptions<KeycloakClientOptions> opts,
         [FromBody] Person[] people,
         CancellationToken ct)
@@ -60,7 +60,7 @@ internal static class KeycloakUserBulkEndpoints
 
     private static async Task<BulkCreateUserResult> CreateUserAsync(
         Person p,
-        KeycloakOpenApiClient kc,
+        IKeycloakOpenApiClient kc,
         string realm,
         CancellationToken ct)
     {
@@ -188,4 +188,7 @@ internal static class KeycloakUserBulkEndpoints
 [JsonSerializable(typeof(List<KeycloakUserBulkEndpoints.Person>))]
 [JsonSerializable(typeof(KeycloakUserBulkEndpoints.BulkCreateUserResult[]))]
 [JsonSerializable(typeof(List<KeycloakUserBulkEndpoints.BulkCreateUserResult>))]
+[JsonSerializable(typeof(KeycloakAdmin.OpenApi.UserRepresentation))]
+[JsonSerializable(typeof(System.Collections.Generic.ICollection<KeycloakAdmin.OpenApi.UserRepresentation>))]
+[JsonSerializable(typeof(KeycloakAdmin.OpenApi.CredentialRepresentation))]
 internal partial class AppJsonSerializerContext : JsonSerializerContext { }
