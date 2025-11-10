@@ -12,16 +12,7 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 builder.Services.AddOpenApi();
 builder.Services.AddKeycloakHttpClient(o =>
 {
-    o.Host = "https://auth.azeta.com.py/";
-    o.Realm = "master";
-    o.ClientId = "admin-cli";
-    o.Flow = KeycloakAuthFlow.Password;
-    o.Username = "admin";
-    o.Password = "admin";
-    o.FailFastOnStartup = true;
-    o.LogRequestBody = true;
-    o.LogResponseBody = true;
-    o.MaxBodyLogBytes = 8192;
+    builder.Configuration.GetSection("Keycloak").Bind(o);
 });
 
 var app = builder.Build();
