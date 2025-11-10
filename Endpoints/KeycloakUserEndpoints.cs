@@ -8,11 +8,67 @@ namespace KeycloakAdmin.Endpoints;
 
 internal static class KeycloakUserBulkEndpoints
 {
-    public static void MapKeycloakUserBulkEndpoints(this IEndpointRouteBuilder app)
+    public static void MapKeycloakEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/keycloak/users");
-        group.MapPost("/bulk", BulkCreate);
+        // --- User Endpoints ---
+        var usersGroup = app.MapGroup("/keycloak/users")
+            .WithTags("Keycloak - Users");
+
+        usersGroup.MapPost("/bulk", BulkCreateUsers);
+
+        // --- Group Endpoints ---
+        var groupsGroup = app.MapGroup("/keycloak/groups")
+            .WithTags("Keycloak - Groups");
+
+        groupsGroup.MapGet("/", GetAllGroups);
     }
+
+    // ========================================================================
+    // Groups
+    // ========================================================================
+
+    private static async Task<IResult> GetAllGroups(
+        [FromServices] IKeycloakOpenApiClient kc,
+        [FromServices] IOptions<KeycloakClientOptions> opts,
+        CancellationToken ct)
+    {
+        try
+        {
+            var realm = opts.Value.Realm;
+
+            var groups = await kc.GroupsAll2Async(
+                briefRepresentation: true,
+                exact: null,
+                first: null,
+                max: null,
+                populateHierarchy: null,
+                q: null,
+                search: null,
+                subGroupsCount: null,
+                realm: realm,
+                cancellationToken: ct);
+
+            return Results.Ok(groups);
+        }
+        catch (ApiException apiEx)
+        {
+            return Results.Problem(
+                detail: apiEx.Response,
+                statusCode: apiEx.StatusCode,
+                title: "Keycloak API Error");
+        }
+        catch (Exception ex)
+        {
+            return Results.Problem(
+                detail: ex.Message,
+                statusCode: 500,
+                title: "An unexpected error occurred.");
+        }
+    }
+
+    // ========================================================================
+    // Users
+    // ========================================================================
 
     /// <summary>
     /// Updated Person record to accept a collection of GroupIds.
@@ -37,7 +93,7 @@ internal static class KeycloakUserBulkEndpoints
         int GroupsAssigned,  // New: How many groups were successfully assigned
         string? Error);
 
-    private static async Task<IResult> BulkCreate(
+    private static async Task<IResult> BulkCreateUsers(
         [FromServices] IKeycloakOpenApiClient kc,
         [FromServices] IOptions<KeycloakClientOptions> opts,
         [FromBody] Person[] people,
@@ -191,4 +247,6 @@ internal static class KeycloakUserBulkEndpoints
 [JsonSerializable(typeof(KeycloakAdmin.OpenApi.UserRepresentation))]
 [JsonSerializable(typeof(System.Collections.Generic.ICollection<KeycloakAdmin.OpenApi.UserRepresentation>))]
 [JsonSerializable(typeof(KeycloakAdmin.OpenApi.CredentialRepresentation))]
+[JsonSerializable(typeof(KeycloakAdmin.OpenApi.GroupRepresentation))]
+[JsonSerializable(typeof(System.Collections.Generic.ICollection<KeycloakAdmin.OpenApi.GroupRepresentation>))]
 internal partial class AppJsonSerializerContext : JsonSerializerContext { }
