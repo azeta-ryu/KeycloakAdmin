@@ -13,23 +13,30 @@ internal static class KeycloakUserBulkEndpoints
         var group = app.MapGroup("/keycloak/users");
         group.MapPost("/bulk", BulkCreate);
     }
-    
+
+    /// <summary>
+    /// Updated Person record to accept a collection of GroupIds.
+    /// </summary>
     public sealed record Person(
-        string NationalId, 
-        string Email, 
-        string Name, 
-        string LastName, 
-        string? GroupId
+        string NationalId,
+        string Email,
+        string Name,
+        string LastName,
+        IReadOnlyCollection<string>? GroupIds // Changed from string? GroupId
     );
 
+    /// <summary>
+    /// Updated result record to report on multiple group assignments.
+    /// </summary>
     public sealed record BulkCreateUserResult(
         string Username,
         string? UserId,
         bool Created,
         bool PasswordSet,
-        bool GroupAssigned,
+        int GroupsRequested, // New: How many non-empty group IDs were provided
+        int GroupsAssigned,  // New: How many groups were successfully assigned
         string? Error);
-    
+
     private static async Task<IResult> BulkCreate(
         [FromServices] KeycloakOpenApiClient kc,
         [FromServices] IOptions<KeycloakClientOptions> opts,
@@ -50,7 +57,7 @@ internal static class KeycloakUserBulkEndpoints
 
         return Results.Ok(results);
     }
-    
+
     private static async Task<BulkCreateUserResult> CreateUserAsync(
         Person p,
         KeycloakOpenApiClient kc,
@@ -60,14 +67,14 @@ internal static class KeycloakUserBulkEndpoints
         var username = p.NationalId?.Trim();
         if (string.IsNullOrWhiteSpace(username))
         {
-            return new(username ?? "", null, false, false, false, "NationalId is required");
+            // Updated return type
+            return new(username ?? "", null, false, false, 0, 0, "NationalId is required");
         }
 
         string? userId = null;
         var created = false;
         var passwordSet = false;
-        var groupAssigned = false;
-        string? mainError = null;
+        // groupAssigned (bool) is removed, will be calculated later
 
         try
         {
@@ -82,7 +89,7 @@ internal static class KeycloakUserBulkEndpoints
 
             await kc.UsersPOSTAsync(user, realm, ct);
             created = true;
-            
+
             var matches = await kc.UsersAll3Async(
                 briefRepresentation: true, email: null, emailVerified: null, enabled: null,
                 exact: true, first: null, firstName: null, idpAlias: null, idpUserId: null,
@@ -107,21 +114,24 @@ internal static class KeycloakUserBulkEndpoints
             }
             catch (Exception fetchEx)
             {
-                return new(username, null, false, false, false, $"User exists, but fetch failed: {fetchEx.Message}");
+                // Updated return type
+                return new(username, null, false, false, 0, 0, $"User exists, but fetch failed: {fetchEx.Message}");
             }
         }
         catch (Exception ex)
         {
-            return new(username, null, created, passwordSet, false, $"Create lookup error: {ex.Message}");
+            // Updated return type
+            return new(username, null, created, passwordSet, 0, 0, $"Create lookup error: {ex.Message}");
         }
 
         try
         {
             if (string.IsNullOrWhiteSpace(userId))
             {
-                return new(username, null, created, false, false, "User ID could not be determined for password set.");
+                // Updated return type
+                return new(username, null, created, false, 0, 0, "User ID could not be determined for password set.");
             }
-            
+
             var cred = new CredentialRepresentation
             {
                 Type = "password",
@@ -131,25 +141,45 @@ internal static class KeycloakUserBulkEndpoints
 
             await kc.ResetPasswordAsync(cred, realm, userId, ct);
             passwordSet = true;
-            
-            if (!string.IsNullOrWhiteSpace(p.GroupId))
+
+            // --- New Group Assignment Logic ---
+            int groupsRequested = 0;
+            int groupsAssigned = 0;
+            string? groupErrorSummary = null;
+
+            if (p.GroupIds != null)
             {
-                try
+                var groupErrors = new List<string>();
+                foreach (var groupId in p.GroupIds.Where(gid => !string.IsNullOrWhiteSpace(gid)))
                 {
-                    await kc.GroupsPUT2Async(p.GroupId, realm, userId, ct);
-                    groupAssigned = true;
+                    groupsRequested++;
+                    try
+                    {
+                        // Use GroupsPUT2Async for "Add user to group"
+                        await kc.GroupsPUT2Async(groupId, realm, userId, ct);
+                        groupsAssigned++;
+                    }
+                    catch (Exception groupEx)
+                    {
+                        var errorMsg = groupEx is ApiException apiEx
+                            ? $"Group '{groupId}' (Code {apiEx.StatusCode}): {apiEx.Message}"
+                            : $"Group '{groupId}': {groupEx.Message}";
+                        groupErrors.Add(errorMsg);
+                    }
                 }
-                catch (Exception groupEx)
+
+                if (groupErrors.Count > 0)
                 {
-                    mainError = $"Group assign error: {groupEx.Message}";
+                    groupErrorSummary = $"Failed {groupErrors.Count} of {groupsRequested} group assignments: " + string.Join("; ", groupErrors);
                 }
             }
 
-            return new(username, userId, created, passwordSet, groupAssigned, mainError);
+            return new(username, userId, created, passwordSet, groupsRequested, groupsAssigned, groupErrorSummary);
         }
         catch (Exception ex)
         {
-            return new(username, userId, created, passwordSet, false, $"Password set error: {ex.Message}");
+            // Updated return type (password set failed, 0 groups processed)
+            return new(username, userId, created, passwordSet, 0, 0, $"Password set error: {ex.Message}");
         }
     }
 }
