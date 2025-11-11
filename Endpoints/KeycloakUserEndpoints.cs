@@ -78,7 +78,8 @@ internal static class KeycloakUserBulkEndpoints
         string Email,
         string Name,
         string LastName,
-        IReadOnlyCollection<string>? GroupIds // Changed from string? GroupId
+        string Password, // --- MODIFIED --- Added password field
+        IReadOnlyCollection<string>? GroupIds
     );
 
     /// <summary>
@@ -89,8 +90,8 @@ internal static class KeycloakUserBulkEndpoints
         string? UserId,
         bool Created,
         bool PasswordSet,
-        int GroupsRequested, // New: How many non-empty group IDs were provided
-        int GroupsAssigned,  // New: How many groups were successfully assigned
+        int GroupsRequested,
+        int GroupsAssigned,
         string? Error);
 
     private static async Task<IResult> BulkCreateUsers(
@@ -123,14 +124,18 @@ internal static class KeycloakUserBulkEndpoints
         var username = p.NationalId?.Trim();
         if (string.IsNullOrWhiteSpace(username))
         {
-            // Updated return type
             return new(username ?? "", null, false, false, 0, 0, "NationalId is required");
+        }
+
+        // --- MODIFIED --- Added password validation
+        if (string.IsNullOrWhiteSpace(p.Password))
+        {
+            return new(username, null, false, false, 0, 0, "Password is required");
         }
 
         string? userId = null;
         var created = false;
         var passwordSet = false;
-        // groupAssigned (bool) is removed, will be calculated later
 
         try
         {
@@ -170,13 +175,11 @@ internal static class KeycloakUserBulkEndpoints
             }
             catch (Exception fetchEx)
             {
-                // Updated return type
                 return new(username, null, false, false, 0, 0, $"User exists, but fetch failed: {fetchEx.Message}");
             }
         }
         catch (Exception ex)
         {
-            // Updated return type
             return new(username, null, created, passwordSet, 0, 0, $"Create lookup error: {ex.Message}");
         }
 
@@ -184,14 +187,13 @@ internal static class KeycloakUserBulkEndpoints
         {
             if (string.IsNullOrWhiteSpace(userId))
             {
-                // Updated return type
                 return new(username, null, created, false, 0, 0, "User ID could not be determined for password set.");
             }
 
             var cred = new CredentialRepresentation
             {
                 Type = "password",
-                Value = username,
+                Value = p.Password, // --- MODIFIED --- Use the password from the request
                 Temporary = false
             };
 
@@ -211,7 +213,6 @@ internal static class KeycloakUserBulkEndpoints
                     groupsRequested++;
                     try
                     {
-                        // Use GroupsPUT2Async for "Add user to group"
                         await kc.GroupsPUT2Async(groupId, realm, userId, ct);
                         groupsAssigned++;
                     }
@@ -234,7 +235,6 @@ internal static class KeycloakUserBulkEndpoints
         }
         catch (Exception ex)
         {
-            // Updated return type (password set failed, 0 groups processed)
             return new(username, userId, created, passwordSet, 0, 0, $"Password set error: {ex.Message}");
         }
     }
