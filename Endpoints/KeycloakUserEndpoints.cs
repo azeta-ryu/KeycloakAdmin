@@ -15,6 +15,7 @@ internal static class KeycloakUserBulkEndpoints
             .WithTags("Keycloak - Users");
 
         usersGroup.MapPost("/bulk", BulkCreateUsers);
+        usersGroup.MapPost("/bulk-sequential", BulkCreateUsersSequential);
 
         // --- Group Endpoints ---
         var groupsGroup = app.MapGroup("/keycloak/groups")
@@ -78,7 +79,8 @@ internal static class KeycloakUserBulkEndpoints
         string Email,
         string Name,
         string LastName,
-        string Password, // --- MODIFIED --- Added password field
+        string Password,
+        bool HasTemporaryPassword, // --- UPDATED ---
         IReadOnlyCollection<string>? GroupIds
     );
 
@@ -115,6 +117,32 @@ internal static class KeycloakUserBulkEndpoints
         return Results.Ok(results);
     }
 
+    private static async Task<IResult> BulkCreateUsersSequential(
+        [FromServices] IKeycloakOpenApiClient kc,
+        [FromServices] IOptions<KeycloakClientOptions> opts,
+        [FromBody] Person[] people,
+        CancellationToken ct)
+    {
+        if (people is null || people.Length == 0)
+            return Results.BadRequest("Body must be a non-empty array of Person.");
+
+        var realm = opts.Value.Realm;
+        var results = new List<BulkCreateUserResult>(people.Length);
+
+        // Loop and await each user one by one
+        foreach (var p in people)
+        {
+            var result = await CreateUserAsync(p, kc, realm, ct);
+            results.Add(result);
+
+            // Optional: If cancellation is requested, stop processing.
+            if (ct.IsCancellationRequested)
+                break;
+        }
+
+        return Results.Ok(results);
+    }
+
     private static async Task<BulkCreateUserResult> CreateUserAsync(
         Person p,
         IKeycloakOpenApiClient kc,
@@ -127,7 +155,6 @@ internal static class KeycloakUserBulkEndpoints
             return new(username ?? "", null, false, false, 0, 0, "NationalId is required");
         }
 
-        // --- MODIFIED --- Added password validation
         if (string.IsNullOrWhiteSpace(p.Password))
         {
             return new(username, null, false, false, 0, 0, "Password is required");
@@ -193,8 +220,8 @@ internal static class KeycloakUserBulkEndpoints
             var cred = new CredentialRepresentation
             {
                 Type = "password",
-                Value = p.Password, // --- MODIFIED --- Use the password from the request
-                Temporary = false
+                Value = p.Password,
+                Temporary = p.HasTemporaryPassword // --- UPDATED ---
             };
 
             await kc.ResetPasswordAsync(cred, realm, userId, ct);
@@ -240,6 +267,7 @@ internal static class KeycloakUserBulkEndpoints
     }
 }
 
+// --- UPDATED --- Added Person[] context
 [JsonSerializable(typeof(KeycloakUserBulkEndpoints.Person[]))]
 [JsonSerializable(typeof(List<KeycloakUserBulkEndpoints.Person>))]
 [JsonSerializable(typeof(KeycloakUserBulkEndpoints.BulkCreateUserResult[]))]
